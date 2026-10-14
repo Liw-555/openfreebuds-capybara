@@ -1,0 +1,21 @@
+**/__pycache__
+*.bak
+*~
+*.swp
+*#
+.DS_Store
+
+/.idea
+/.flatpak
+/.flatpak-pip-generator
+/.vagrant
+/.pdm-python
+/.python-version
+/.venv
+/.vscode
+/build
+/dist
+
+# Portable mode data
+/data
+/is_portable

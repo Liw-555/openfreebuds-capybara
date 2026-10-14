@@ -1,0 +1,55 @@
+import "../build.just"
+
+flatpak_dir := absolute_path(env("FLATPAKBUILDDIR", './build/flatpak'))
+
+# Install dependencies for Flatpak build
+[group("prepare"),linux]
+deps_flatpak:
+    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    flatpak install -y --user org.flatpak.Builder
+
+# Install OpenFreebuds as Flatpak package
+[group("os_linux"),linux]
+flatpak_install: build
+    mkdir -p {{flatpak_dir}}
+    echo "*" > {{flatpak_dir}}/.gitignore
+    flatpak run org.flatpak.Builder \
+            --force-clean --user --install \
+            --install-deps-from=flathub \
+            --repo={{flatpak_dir}}/repo \
+            --state-dir={{flatpak_dir}}/state \
+            --disable-rofiles-fuse \
+        {{flatpak_dir}}/builddir \
+        {{sources_dir}}/scripts/flatpak/pw.mmk.OpenFreebuds.yml
+
+# Build Flatpak package file
+[group("os_linux"),linux]
+flatpak: flatpak_install
+    mkdir -p dist
+    flatpak build-bundle \
+        {{flatpak_dir}}/repo \
+        ./dist/openfreebuds_{{version}}_{{arch()}}.flatapk \
+        pw.mmk.OpenFreebuds
+
+# Sync Python dependencies for Flatpak
+[group("manage"),linux]
+sync_flatpak:
+    mkdir -p {{flatpak_dir}}
+
+    # Prepare venv with req2flatpak
+    python -m venv {{flatpak_dir}}/venv
+    {{flatpak_dir}}/venv/bin/pip install req2flatpak==0.3.1
+
+    # Export PDM dependencies and create Flatpak script
+    pdm export --without-hashes --without no_flatpak --without dev \
+        | grep '^[a-zA-Z].*$' \
+        | grep -Ev 'win32|darwin' > {{ flatpak_dir }}/requirements.txt
+    {{ flatpak_dir }}/venv/bin/req2flatpak \
+         --requirements-file {{ flatpak_dir }}/requirements.txt \
+         --outfile ./scripts/flatpak/python3-requirements.json \
+         --target-platforms 313-x86_64 313-aarch64
+
+    # Fix install command
+    sed -i \
+        's/--verbose --exists-action=i/--verbose --no-deps --exists-action=i/g' \
+        scripts/flatpak/python3-requirements.json
